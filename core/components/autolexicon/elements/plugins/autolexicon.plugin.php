@@ -40,6 +40,8 @@
  * @var modResource $targetResource
  * @var modContext $context
  */
+// todo-important: remove debug req. here and in Babel MODX plugin
+if(!$modx->user->get('id') == 1) return;
 
 $autolexicon = $modx->getService('autolexicon','AutoLexicon',$modx->getOption('autolexicon.core_path',null,$modx->getOption('core_path').'components/autolexicon/').'model/autolexicon/',$scriptProperties);
 if (!($autolexicon instanceof AutoLexicon)) return;
@@ -56,6 +58,15 @@ case 'OnLoadWebDocument':
     if(!$resource) {break;}
     $autolexicon->OnLoadWebDocument($resource);
     break;
+// back-end events
+case 'OnDocFormPrerender':
+case 'OnDocFormRender':
+case 'OnDocFormSave':
+    $resource =& $modx->event->params['resource'];
+    if(!$resource) {break;}
+    $autolexicon->{$modx->event->name}($resource);
+    break;
+
 // unfinished front-end events
 case 'OnLoadWebPageCache':
     if ($modx->context->get('key') == 'mgr') continue;
@@ -64,29 +75,17 @@ case 'OnWebPageInit':
     if ($modx->context->get('key') == 'mgr') continue;
     break;
 
-// back-end events
-case 'OnDocFormPrerender':
-    $resource =& $modx->event->params['resource'];
-    if(!$resource) {break;}
-    $autolexicon->OnDocFormPrerender($resource);
-    break;
-case 'OnDocFormRender':
-    $resource =& $modx->event->params['resource'];
-    if(!$resource) {break;}
-    $autolexicon->OnDocFormRender($resource);
+// unfinished/unused back-end events
+case 'OnManagerPageAfterRender':
+    $controller =& $modx->event->params['controller'];
+    if(!$controller) {break;}
+//    $autolexicon->OnManagerPageAfterRender($controller);
     break;
 case 'OnResourceTVFormRender':
     if($modx->event->params['hidden']) break;
     $resource_id =& $modx->event->params['resource'];
     if(!$resource_id) {break;}
     break;
-case 'OnDocFormSave':
-    $resource =& $modx->event->params['resource'];
-    if(!$resource) {break;}
-    $autolexicon->OnDocFormSave($resource);
-    break;
-
-// unfinished back-end events
 case 'OnBeforeDocFormSave':
     $resource =& $modx->event->params['resource'];
     if(!$resource) {break;}
