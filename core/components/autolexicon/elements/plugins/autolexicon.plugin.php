@@ -41,77 +41,72 @@
  * @var modContext $context
  */
 // todo-important: remove debug req. here and in Babel MODX plugin
-if(!$modx->user->get('id') == 1) return;
+if (!$modx->user->get('id') == 1) return;
 
-$autolexicon = $modx->getService('autolexicon','AutoLexicon',$modx->getOption('autolexicon.core_path',null,$modx->getOption('core_path').'components/autolexicon/').'model/autolexicon/',$scriptProperties);
+$autolexicon = $modx->getService('autolexicon', 'AutoLexicon', $modx->getOption('autolexicon.core_path', null, $modx->getOption('core_path') . 'components/autolexicon/') . 'model/autolexicon/', $scriptProperties);
 if (!($autolexicon instanceof AutoLexicon)) return;
 
 switch ($modx->event->name) {
 // front-end events
-case 'OnHandleRequest':
-    if ($modx->context->get('key') == 'mgr') continue;
-    $autolexicon->OnHandleRequest();
-    break;
-case 'OnLoadWebDocument':
-    if ($modx->context->get('key') == 'mgr') continue;
-    $resource =& $modx->resource;
-    if(!$resource) {break;}
-    $autolexicon->OnLoadWebDocument($resource);
-    break;
-// back-end events
-case 'OnDocFormPrerender':
-case 'OnDocFormRender':
-case 'OnDocFormSave':
-    $resource =& $modx->event->params['resource'];
-    if(!$resource) {break;}
-    $autolexicon->{$modx->event->name}($resource);
-    break;
-
-// unfinished front-end events
-case 'OnLoadWebPageCache':
-    if ($modx->context->get('key') == 'mgr') continue;
-     break;
-case 'OnWebPageInit':
-    if ($modx->context->get('key') == 'mgr') continue;
-    break;
-
-// unfinished/unused back-end events
-case 'OnManagerPageAfterRender':
-    $controller =& $modx->event->params['controller'];
-    if(!$controller) {break;}
-//    $autolexicon->OnManagerPageAfterRender($controller);
-    break;
-case 'OnResourceTVFormRender':
-    if($modx->event->params['hidden']) break;
-    $resource_id =& $modx->event->params['resource'];
-    if(!$resource_id) {break;}
-    break;
-case 'OnBeforeDocFormSave':
-    $resource =& $modx->event->params['resource'];
-    if(!$resource) {break;}
-    $data =& $modx->event->params['data'];
-    break;
-case 'OnResourceTVFormPrerender':
-    break;
-case 'OnResourceDuplicate':
-    /* init AutoLexicon TV of duplicated resources */
-    $resource =& $modx->event->params['newResource'];
-    if(!$resource) {break;}
-    break;
-case 'OnEmptyTrash':
-    /* remove translation links to non-existing resources */
-    $deletedResourceIds =& $modx->event->params['ids'];
-    if (empty($deletedResourceIds)) break;
-    if(is_array($deletedResourceIds)) {
-        foreach ($deletedResourceIds as $deletedResourceId) {
-            continue;
+    case 'OnHandleRequest':
+        if ($modx->context->get('key') == 'mgr') continue;
+        $autolexicon->OnHandleRequest();
+        break;
+    case 'OnLoadWebDocument':
+        if ($modx->context->get('key') == 'mgr') continue;
+        $resource =& $modx->resource;
+        if (!$resource) {
+            break;
         }
-    }
-    break;
-case 'OnContextRemove':
-    /* remove translation links to non-existing contexts */
-    $context =& $modx->event->params['context'];
-    if(!$context) {break;}
-    break;
+        $autolexicon->OnLoadWebDocument($resource);
+        break;
+// back-end events
+    case 'OnDocFormPrerender':
+    case 'OnDocFormRender':
+    case 'OnDocFormSave':
+        $resource =& $modx->event->params['resource'];
+        if (!$resource) {
+            break;
+        }
+        $autolexicon->{$modx->event->name}($resource);
+        break;
+    case 'OnSiteRefresh':
+        $autolexicon->OnSiteRefresh();
+        break;
+    case 'OnResourceDuplicate':
+        /* remove translation links to non-existing resources */
+        $newResource =& $modx->event->params['newResource'];
+        $oldResource =& $modx->event->params['oldResource'];
+        $autolexicon->OnDocFormSave($newResource);
+        break;
+    case 'OnEmptyTrash':
+        /* remove translation links to non-existing resources */
+        $deletedResourceIds =& $modx->event->params['ids'];
+        $autolexicon->OnEmptyTrash($deletedResourceIds);
+        break;
+    case 'OnContextBeforeRemove':
+    case 'OnContextRemove':
+        /* remove translation links to non-existing contexts */
+        $context =& $modx->event->params['context'];
+        if (!$context) {break;}
+        $autolexicon->{$modx->event->name}($context);
+        break;
+    case 'OnManagerPageAfterRender':
+        $controller =& $modx->event->params['controller'];
+        if (!$controller) {break;}
+        $autolexicon->OnManagerPageAfterRender($controller);
+        break;
+
+
+
+// unfinished/unused events
+    case 'OnWebPageInit':
+        if ($modx->context->get('key') == 'mgr') continue;
+        break;
+    case 'OnBeforeDocFormSave':
+        $resource =& $modx->event->params['resource'];
+        if (!$resource) {break;}
+        $data =& $modx->event->params['data'];
+        break;
 }
 return;

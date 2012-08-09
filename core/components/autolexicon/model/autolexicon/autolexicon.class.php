@@ -46,6 +46,7 @@ class AutoLexicon {
      * @var array A collection of properties to adjust AutoLexicon behaviour.
      */
     public $config = array();
+    public $resources_removed = array();
 
     /**
      * The AutoLexicon Constructor.
@@ -124,6 +125,39 @@ class AutoLexicon {
         return $this->config['lexicon_key_prefix'].$resource_id.'_'.$field;
     }
 
+    // todo: replace with getCollection(entries) and see which is faster
+    public function _getLexiconValue($resource_id, $field, $lang=null) {
+        if ($lang) {
+            $this->modx->getService('lexicon','modLexicon');
+            if ($this->modx->lexicon) {
+                $this->modx->lexicon->load($lang.':autolexicon:resource');
+            }
+        }
+        $lexicon_key = $this->_getLexiconKey($resource_id, $field);
+        $output = $this->modx->lexicon($lexicon_key);
+        $output = ($output == $lexicon_key) ? null : $output;
+        return $output;
+    }
+
+    /**
+     * Updates the lexicon entries for a resource field.
+     *
+     * @param modResource $resource
+     * @param string $field Field Name
+     * @param string $lang Language Key
+     * @param mixed $new_value
+     */
+    public function _setLexiconValue($resource_id, $field, $lang, $new_value) {
+        $entry = $this->_getLexiconEntry($resource_id, $field, $lang);
+        // update the current language
+        $new_value = (string) $new_value ? $new_value : '';
+        // save new or changed values
+        if ($new_value != $entry->get('value') || !$entry->get('id')) {
+            $entry->set('value', $new_value);
+            $entry->save();
+        }
+    }
+
     public function _fieldIsTv($field) {
         return !in_array($field,$this->config['sync_fields']);
     }
@@ -135,27 +169,48 @@ class AutoLexicon {
         }
         return $output;
     }
-    public function _setResourceField(modResource $resource, $field, $value) {
+
+    /**
+     * @param modResource $resource
+     * @param string $field The field name of the resource or a TV name.
+     * @param string $value The new value
+     * @param bool $save_tv Set to true to save the TV after setting it.
+     * @return \modResource
+     */
+    public function _setResourceField(modResource &$resource, $field, $value, $save_tv = false) {
+        // todo-important: do not set TV if matches default
         if ($this->_fieldIsTv($field)) {
-            $resource->setTVValue($field, $value);
+            /** @var modTemplateVar $tv */
+            $tv = $this->modx->getObject('modTemplateVar',array('name' => $field));
+            if ($tv && ($value != $tv->get('default_text'))) {
+                $tv->setValue($resource->get('id'),$value);
+                if ($save_tv && !$tv->save()) {
+                    $this->modx->log(modX::LOG_LEVEL_ERROR, "TV failed to save in AutoLexicon");
+                }
+            }
         } else {
             $resource->set($field, $value);
         }
+        return $resource;
     }
-    public function _translateResourceFields(modResource $resource){
+    public function _translateResourceFields(modResource $resource, $process_tags = false){
         foreach ($this->config['fields'] as $field) {
-            $lexicon_key = $this->_getLexiconKey($resource->get('id'), $field);
-            $field_content = $this->modx->lexicon($lexicon_key);
+            $field_content = $this->_getLexiconValue($resource->get('id'), $field);
+            if (is_null($field_content)) {
+                continue;
+            }
             // if the lexicon tag is NULL, but not the resource content, skip this field
             if($field_content == $this->config['null_value']) {
                 $resource_content = $this->_getResourceField($resource, $field);
-                if ($resource_content) {
-                    return;
+                if ($resource_content != $this->config['null_value']) {
+                    continue;
                 }
             }
-            if($lexicon_key != $field_content) {
-                $this->_setResourceField($resource, $field, $field_content);
+            // unused
+            if ($process_tags) {
+                $this->modx->parser->processElementTags('', $field_content, true, false);
             }
+            $this->_setResourceField($resource, $field, $field_content);
         }
     }
 
@@ -221,82 +276,70 @@ class AutoLexicon {
         return $outputLanguageItems;
     }
 
+    /**
+     * Fully syncs resource with lexicon per AutoLexicon rules.
+     *
+     * @param modResource $resource
+     * @param $current_lang
+     */
     public function _updateResource(modResource $resource, $current_lang){
         // todo: choose default for missing entries: leave blank, use default lang value, or static default
         // todo: add alternative to ignoring pagetitle, or add lexicon key to menutitle
         foreach ($this->config['fields'] as $field) {
-            $this->_updateResourceFieldLexicon($resource, $field, $current_lang);
-            $this->_updateResourceField($resource, $field);
-            // create empty slots for the other languages if they don't already exist
-            foreach ($this->config['langs'] as $lang) {
-                if ($lang != $current_lang) {
-                    $this->_initResourceFieldLexicon($resource, $field, $lang);
-                }
-            }
+            $new_value = $this->_getResourceField($resource, $field);
+            $this->_updateResourceField($resource, $field, $current_lang, $new_value);
         }
         $resource->save();
     }
 
-    /**
-     * Initializes the lexicon entries for a resource field.
-     *
-     * @param modResource $resource
-     * @param string $field Field Name
-     * @param string $lang Language Key
-     */
-    public function _initResourceFieldLexicon(modResource $resource, $field, $lang) {
-        $entry = $this->_getLexiconEntry($resource->get('id'), $field, $lang);
-        // only save the entry if it has just been created
-        if (!$entry->get('id')) {
-            $entry->save();
+    public function _updateResourceField(modResource $resource, $field, $lang, $new_value) {
+        $lexicon_value = $new_value;
+        $resource_id = $resource->get('id');
+        // special treatment for fields that already contain at least one lexicon key
+        $has_lexicon_tag = $this->_hasLexiconTag($new_value);
+        if($has_lexicon_tag) {
+            $lexicon_tag = $this->_generateLexiconTag($resource_id,$field);
+            if ($new_value == $lexicon_tag) {
+                return;
+            }
+            $lexicon_value = $this->config['null_value'];
         }
-    }
-    /**
-     * Updates the lexicon entries for a resource field.
-     *
-     * @param modResource $resource
-     * @param string $field Field Name
-     * @param string $lang Language Key
-     */
-    public function _updateResourceFieldLexicon(modResource $resource, $field, $lang) {
-        $entry = $this->_getLexiconEntry($resource->get('id'), $field, $lang);
-        $new_value = $this->_getResourceField($resource, $field);
-        // set as null fields that already contain at least one lexicon key
-        if($this->_hasLexiconTag($new_value)) {
-            $new_value = $this->config['null_value'];
+        $this->_setLexiconValue($resource_id, $field, $lang, $lexicon_value);
+        // save lexicon tag to field if not already has one
+        if (!$has_lexicon_tag) {
+            // for non-tag-replaced fields, only store value of default language
+            if (in_array($field,$this->config['skip_value_replacement'])) {
+                if ($lang == $this->config['default_lang']) {
+                    return;
+                }
+                $value_to_set = $this->_getLexiconValue($resource_id, $field, $this->config['default_lang']);
+            } else {
+                // update the current language
+                if ($new_value) {
+                    $value_to_set = $this->_generateLexiconTag($resource_id, $field);
+                } elseif (in_array($field,$this->config['set_pagetitle_as_default'])) {
+                    $value_to_set = $this->_generateLexiconTag($resource_id, 'pagetitle');
+                } else {
+                    $value_to_set = '';
+                }
+            }
+            // permanently create TV value
+            $this->_setResourceField($resource, $field, $value_to_set, true);
         }
-        // update the current language
-        $new_value = (string) $new_value ? $new_value : '';
-        if ($new_value != $entry->get('value')) {
-            $entry->set('value', $new_value);
-            $entry->save();
+        // create empty slots for the other languages if they don't already exist
+        foreach ($this->config['langs'] as $other_lang) {
+            if ($other_lang != $lang) {
+                $this->_initializeLexiconEntry($resource_id, $field, $other_lang);
+            }
         }
     }
 
-    /**
-     * Updates the permanent values of the resource field without saving the resource.
-     *
-     * @param modResource $resource
-     * @param string $field Field Name
-     */
-    public function _updateResourceField(modResource $resource, $field) {
-        if (in_array($field,$this->config['skip_value_replacement'])) {
-            return;
+    public function _initializeLexiconEntry($resource_id, $field, $lang) {
+        $entry = $this->_getLexiconEntry($resource_id, $field, $lang);
+        if (!$entry->get('id')) {
+            $entry->set('value', '');
+            $entry->save();
         }
-        $new_value = $this->_getResourceField($resource, $field);
-        // skip fields that already contain at least one lexicon key
-        if($this->_hasLexiconTag($new_value)) {
-            return;
-        }
-        // update the current language
-        if ($new_value) {
-            $value_to_set = $this->_generateLexiconTag($resource->get('id'), $field);
-        } elseif (in_array($field,$this->config['set_pagetitle_as_default'])) {
-            $value_to_set = $this->_generateLexiconTag($resource->get('id'), 'pagetitle');
-        } else {
-            $value_to_set = '';
-        }
-        $this->_setResourceField($resource, $field, $value_to_set);
     }
 
     /**
@@ -362,6 +405,26 @@ class AutoLexicon {
         $this->modx->cacheManager->refresh();
     }
 
+    public function _removeLexiconLinks(array $resource_ids) {
+        $name_array = array();
+        $prefix = '';
+        foreach($resource_ids as $resource_id) {
+            $entry = array();
+            $entry[$prefix.'name:LIKE'] = $this->_getLexiconKey($resource_id, '');
+            $name_array[] = $entry;
+            $prefix = 'OR:';
+        }
+        $query = $this->modx->newQuery('modLexiconEntry', array(
+            'topic' => 'resource',
+            'namespace' => 'autolexicon',
+            $name_array,
+        ));
+        $entries = $this->modx->getCollection('modLexiconEntry',$query);
+        foreach ($entries as $entry) {
+            /** @var $entry modLexiconEntry */
+            $entry->remove();
+        }
+    }
 
 /*******************************************/
 /*               Manager Events            */
@@ -393,6 +456,32 @@ class AutoLexicon {
         $this->_refreshCache();
     }
 
+    public function OnSiteRefresh() {
+        $this->_refreshCache();
+    }
+
+    public function OnEmptyTrash(array $deletedResourceIds) {
+        $this->_removeLexiconLinks($deletedResourceIds);
+    }
+
+    public function OnContextBeforeRemove(modContext $context) {
+        $resource_ids = array();
+        $resources = $context->getMany('ContextResources');
+        foreach ($resources as $resource) {
+            /** @var $resource modResource */
+            $resource_ids[] = $resource->get('id');
+        }
+        $this->resources_removed[$context->get('key')] = $resource_ids;
+    }
+
+    public function OnContextRemove(modContext $context) {
+        if(isset($this->resources_removed[$context->get('key')])) {
+            $resources_removed = $this->resources_removed[$context->get('key')];
+            $this->_removeLexiconLinks($resources_removed);
+        } else {
+            $this->modx->log(modX::LOG_LEVEL_ERROR, "Failed to remove resources for deleted context ".$context->get('key'));
+        }
+    }
 
 
 
@@ -426,17 +515,13 @@ class AutoLexicon {
             $full_lexicon_tag = $val[0];
             $resource_id = $val[1];
             $field = $val[2];
-            $lexicon_key = $this->_getLexiconKey($resource_id, $field);
-            $lexicon_value = $this->modx->lexicon($lexicon_key);
-//            $new_value = $lexicon_value != $lexicon_key ? $lexicon_value : '';
-            $new_value = $lexicon_value;
-            $string = str_replace($full_lexicon_tag,$new_value,$string);
+            $lexicon_value = $this->_getLexiconValue($resource_id, $field);
+            $string = str_replace($full_lexicon_tag,$lexicon_value,$string);
         }
         return $string;
     }
 
     public function OnManagerPageAfterRender(modManagerController $controller) {
-        return;
         $old_lang = $this->modx->cultureKey;
         $lang = $this->_getCurrentManagerLang();
         $this->_switchLanguage($lang);
@@ -519,5 +604,6 @@ class AutoLexicon {
         }
         return $chunk;
     }
+
 
 }
