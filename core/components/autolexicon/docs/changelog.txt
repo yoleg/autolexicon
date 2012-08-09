@@ -1,0 +1,5 @@
+Changelog for AutoLexicon.
+
+AutoLexicon 1.0-pl
+==============
+Initial release based on Babel 2.2.5-pl
