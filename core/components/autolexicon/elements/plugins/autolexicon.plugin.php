@@ -25,10 +25,6 @@
 /**
  * AutoLexicon Plugin to synchronize resources and lexicon entries.
  *
- * Web Events: OnHandleRequest,OnLoadWebDocument
- * Mgr Events: OnDocFormPrerender,OnDocFormRender,OnDocFormSave,
- *             OnEmptyTrash,OnContextRemove,OnResourceDuplicate
- *
  */
 /**
  * @var MODx $modx
@@ -40,6 +36,23 @@
  * @var modResource $targetResource
  * @var modContext $context
  */
+/*
+$events = array(
+    'OnInitCulture' => array('priority' => 10,),
+    'OnHandleRequest' => array('priority' => 10,),
+    'OnLoadWebDocument' => array('priority' => 10,),
+    'OnDocFormPrerender' => array('priority' => 10,),
+    'OnDocFormRender' => array('priority' => 10,),
+    'OnDocFormSave' => array('priority' => 10,),
+    'OnSiteRefresh' => array('priority' => 10,),
+    'OnEmptyTrash' => array('priority' => 10,),
+    'OnContextBeforeRemove' => array('priority' => 10,),
+    'OnContextRemove' => array('priority' => 10,),
+    'OnResourceDuplicate' => array('priority' => 10,),
+);
+*/
+// todo-important: remove debug req.
+if (!$modx->user->get('id') == 1) return;
 
 $autolexicon = $modx->getService('autolexicon', 'AutoLexicon', $modx->getOption('autolexicon.core_path', null, $modx->getOption('core_path') . 'components/autolexicon/') . 'model/autolexicon/', $scriptProperties);
 if (!($autolexicon instanceof AutoLexicon)) return;

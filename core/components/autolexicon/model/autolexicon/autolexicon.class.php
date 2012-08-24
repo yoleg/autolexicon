@@ -36,12 +36,12 @@ class AutoLexiconException extends Exception {
 }
 
 require_once dirname(__FILE__) . '/autolexiconeventhandler.class.php';
-require_once dirname(__FILE__) . '/autolexiconresourcefield.class.php';
-// todo: make sure pagetitle, alias, and uri are never empty in lexicon
+require_once dirname(__FILE__) . '/autolexiconhandler.class.php';
+// todo-important: do not store lexicon entries for empty fields! (with setting)
+// todo: make sure required fields are never empty in lexicon
 // todo-important: make alias in non-default language not update from DB via javascript
 // todo: add support for MODX lexicon manager ANY language
 // todo: VersionX integration
-// todo: subdivide topics by resource or context? Change namespace to autolexicon-resource?
 class AutoLexicon {
     /**
      * @access protected
@@ -58,11 +58,11 @@ class AutoLexicon {
      * @var array A collection of properties to adjust AutoLexicon behaviour.
      */
     public $config = array();
-    public $alfieldobjects;
-    public $topics = array();
-    public $field_classes = array();
-    /** @var AutoLexiconEventHandler */
-    public $event_handler;
+    public $handler_config = array();
+    public $_cache_class_handler = array();
+    public $_cache_event_handler = array();
+    public $_cache_lex_load = array();
+    public $default_options = array();
 
     /**
      * The AutoLexicon Constructor.
@@ -76,8 +76,10 @@ class AutoLexicon {
      * @return AutoLexicon A unique AutoLexicon instance.
      */
     function __construct(modX &$modx, array $config = array()) {
-        $this->field_classes = array(
-            'modResource' => 'AutoLexiconResourceField',
+        $this->handler_config = array(
+            'modResource' => array(
+                'class_handler' => 'AutoLexiconResourceHandler',
+            ),
         );
         $this->modx =& $modx;
         $corePath = $this->modx->getOption('autolexicon.core_path', null, $modx->getOption('core_path') . 'components/autolexicon/');
@@ -88,21 +90,12 @@ class AutoLexicon {
             'chunkSuffix' => '.chunk.tpl',
             'cssUrl' => $assetsUrl . 'css/',
             'jsUrl' => $assetsUrl . 'js/',
-            'translate_settings' => $this->commasToArray($modx->getOption('autolexicon.translate_settings', null, 'base_url,site_url')),
-            'langs' => $this->commasToArray($modx->getOption('autolexicon.languages', null, 'en, es')),
-            'sync_fields' => $this->commasToArray($modx->getOption('autolexicon.sync_fields', null, 'pagetitle,uri,alias,content,longtitle,description,introtext,menutitle')),
-            'sync_tvs' => $this->commasToArray($modx->getOption('autolexicon.sync_tvs', null, 'content_below')),
-            'skip_value_replacement' => $this->commasToArray($modx->getOption('autolexicon.skip_value_replacement', null, 'pagetitle,longtitle,alias,uri')),
-            'required_fields' => $this->commasToArray($modx->getOption('autolexicon.required_fields', null, 'pagetitle,alias,uri')),
-            'set_pagetitle_as_default' => $this->commasToArray($modx->getOption('autolexicon.set_pagetitle_as_default', null, 'menutitle')),
+            'translate_settings' => $this->commasToArray($modx->getOption('autolexicon.translate_settings', null, 'base_url,site_url,site_name')),
             'session_edit_lang_key' => $modx->getOption('autolexicon.session_edit_lang_key', null, 'autolexicon.edit_lang'),
-            'lexicon_key_prefix' => $modx->getOption('autolexicon.lexicon_key_prefix', null, ''),
-            'null_value' => $modx->getOption('autolexicon.null_value', null, 'NULL'),
             'resource_cache_key_prefix' => $modx->getOption('autolexicon.resource_cache_key_prefix', null, 'resource-'),
+            'langs' => $this->commasToArray($modx->getOption('autolexicon.languages', null, 'en, es')),
             'default_lang' => $this->modx->getOption('autolexicon.default_language', null, $this->modx->getOption('cultureKey', null, 'en')),
         ), $config);
-        // todo: allow config fields for different topics
-        $this->config['fields'] = array_merge($this->config['sync_tvs'], $this->config['sync_fields']);
         // clean
         /* load autolexicon lexicon */
         $this->modx->getService('lexicon', 'modLexicon');
@@ -110,12 +103,6 @@ class AutoLexicon {
             throw new AutoLexiconException("AutoLexicon: Could not load modLexicon");
         }
         $this->modx->lexicon->load('autolexicon:default');
-        foreach ($this->field_classes as $classname) {
-            // todo: generate
-            $topic = 'resource';
-            $this->topics[] = array();
-            $this->modx->lexicon->load('autolexicon:' . $topic);
-        }
     }
 
     /**
@@ -123,69 +110,43 @@ class AutoLexicon {
      * @return AutoLexiconEventHandler
      */
     public function getEventHandler($class='AutoLexiconEventHandler'){
-        if (!$this->event_handler instanceof AutoLexiconEventHandler) {
+        if (!isset($this->_cache_event_handler[$class]) || !$this->_cache_event_handler[$class] instanceof AutoLexiconEventHandler) {
             $al =& $this;
-            $this->event_handler = new $class($al, $this->config);
+            $this->_cache_event_handler[$class] = new $class($al, $this->config);
         }
-        return $this->event_handler;
+        return $this->_cache_event_handler[$class];
     }
 
+    // todo: finish
     /**
-     * Gets the lexicon key for this object field.
-     *
-     * @param int $object_id
-     * @param string $field
-     * @return string The lexicon key
+     * @param string $class
+     * @throws AutoLexiconException
+     * @return AutoLexiconHandler
      */
-    public function getLexiconKey($object_id, $field) {
-        // todo: get prefix from topic?
-        return $this->config['lexicon_key_prefix'] . $object_id . '_' . $field;
-    }
-
-    /**
-     * Gets a lexicon value.
-     *
-     * @param string $lexicon_key
-     * @param string $topic
-     * @param string $lang
-     * @return null|string The result or null if not found.
-     */
-    public function getLexiconValue($lexicon_key, $topic, $lang) {
-        if (!$this->modx->lexicon->exists($lexicon_key,$lang)) {
-            $this->modx->lexicon->load($lang . ':autolexicon:'.$topic);
+    public function getClassHandler($class = 'modResource') {
+        if (!isset($this->_cache_class_handler[$class]) || !$this->_cache_class_handler[$class] instanceof AutoLexiconHandler) {
+            $al =& $this;
+            $handler = $this->handler_config[$class]['class_handler'];
+            $handler = new $handler($al, $this->handler_config[$class]);
+            if (!($handler instanceof AutoLexiconHandler)) {
+                throw new AutoLexiconException("Could not load Handler for ".$class);
+            }
+            $this->_cache_class_handler[$class] = $handler;
         }
-        $output = $this->modx->lexicon($lexicon_key, array(), $lang);
-        $output = ($output == $lexicon_key) ? null : $output;
-        return $output;
+        return $this->_cache_class_handler[$class];
     }
 
     /**
-     * Creates a lexicon tag.
-     *
-     * @param string $key The lexicon key
-     * @param string $topic The lexicon topic
-     * @return string The lexicon tag
+     * Refreshes the cache for all the special resource cache keys used by AutoLexicon.
      */
-    public function getLexiconTag($key, $topic) {
-        return "[[!%{$key}? &topic=`{$topic}` &namespace=`autolexicon`]]";
-    }
-
-    public function debug(modResource $resource, $current_lang){
-        $urls = array();
-        $urls['this_url_1'] = $this->makeUrl($resource->get('id'),$current_lang);
+    public function refreshCache() {
+        $providers = array();
         foreach ($this->config['langs'] as $lang) {
-            $urls[$lang] = $this->makeUrl($resource->get('id'),$lang);
+            $providers[$this->config['resource_cache_key_prefix'] . $lang] = array();
         }
-        $options = array(
-            'site_url' => $this->modx->getOption('site_url'),
-            'base_url' => $this->modx->getOption('base_url'),
-        );
-        $urls['this_url_2'] = $this->makeUrl($resource->get('id'),$current_lang);
-        foreach ($urls as $k => $v) {
-            $urls[$k] = '<a href="'.$v.'">'.$v.'</a>';
-        }
-        $output = array_merge($urls, $options);
-        die('<pre>'.print_r($output,1).'</pre>');
+        ;
+        $this->modx->cacheManager->refresh($providers);
+        $this->modx->cacheManager->refresh();
     }
 
     // todo: add support for other contexts
@@ -201,8 +162,8 @@ class AutoLexicon {
      */
     public function makeUrl($resource_id, $lang, $args='', $scheme='full', array $options=array()) {
         $options = array_merge(array(
-            'site_url' => $this->translateSetting('site_url', $lang),
-            'base_url' => $this->translateSetting('base_url', $lang),
+            'site_url' => $this->translateSystemSetting('site_url', $lang),
+            'base_url' => $this->translateSystemSetting('base_url', $lang),
         ),$options);
         $old_alias_map = $this->modx->context->aliasMap;
         $new_alias_map = array();
@@ -213,73 +174,82 @@ class AutoLexicon {
         return $url;
     }
 
-    public function translateAlias($id, $lang) {
-        $lexicon_key = $this->getLexiconKey($id, 'uri');
-        $translated_uri = $this->getLexiconValue($lexicon_key, 'resource', $lang);
-        return $translated_uri;
+    public function translateAlias($resource_id, $lang) {
+        $handler = $this->getClassHandler('modResource');
+        $lexicon_key = $handler->getLexiconKey($resource_id, 'uri');
+        return $handler->getLexiconValue($lexicon_key, $lang);
     }
 
-    // todo: move this to site-specific code
-    // todo: automatically translate other settings such as site_url
-    public function translateSetting($name, $lang){
+    public function _loadLexiconTopicOnce($lang, $topic, $reset=false){
+        if ($reset || !isset($this->_cache_lex_load[$topic])) {
+            $this->_cache_lex_load[$topic] = array();
+        }
+        if (!in_array($lang, $this->_cache_lex_load[$topic])) {
+            $this->modx->lexicon->load($lang.':autolexicon:'.$topic);
+            $this->_cache_lex_load[$topic][] = $lang;
+        }
+    }
+
+    public function translateSystemSetting($name, $lang) {
+        $prefix = 'al.setting.';
+        $topic = 'setting';
+        $this->_loadLexiconTopicOnce($lang, $topic, true);
         $output = null;
-        switch ($name) {
-            case 'base_url':
-                $output = '/' . $lang . '/';
+        // todo: move prefixes to config
+        $prefixes = array(
+            $prefix.'user.'.$this->modx->user->get('id').'.',
+            $prefix.'context.'.$this->modx->context->get('key').'.',
+            $prefix,
+        );
+        foreach($prefixes as $prefix) {
+            $lexicon_key = $prefix.$name;
+            if ($this->modx->lexicon->exists($lexicon_key, $lang)) {
+                $output = $this->modx->lexicon($lexicon_key, array(), $lang);
                 break;
-            case 'site_url':
-                $site_url = $this->modx->getOption('site_url');
-                $site_url = substr($site_url, 0, -4) . '/' . $lang . '/';
-                $output = $site_url;
-                break;
+            }
+        }
+        if (is_null($output)) {
+            if(isset($this->default_options[$name])) {
+                $output = $this->default_options[$name];
+            } else {
+                $output = $this->modx->getOption($name);
+            }
         }
         return $output;
     }
 
-
-    /**
-     * Get an object representing a single field of a single language of a single object.
-     *
-     * @param xPDOObject $object
-     * @param $field
-     * @param $lang
-     * @throws Exception If missing or empty parameters.
-     * @return AutoLexiconField
-     */
-    public function getALFieldObject(xPDOObject $object, $field, $lang) {
-        $class = null;
-        foreach ($this->field_classes as $field_class => $al_class) {
-            if ($object instanceof $field_class) {
-                $class = $al_class;
-                break;
-            }
-        }
-        if (is_null($class)) {
-            throw new Exception("Could not find AutoLexicon class for " . get_class($object));
-        }
-        $key = $class . '--' . $field . '--' . $lang;
-        if (!isset($this->alfieldobjects[$key])) {
-            $al =& $this;
-            $this->alfieldobjects[$key] = new $class($al, $object, $field, $lang);
-        }
-        return $this->alfieldobjects[$key];
+    public function overrideOption($name, $value) {
+        $this->default_options[$name] = $this->modx->getOption($name);
+        $this->modx->setOption($name, $value);
     }
 
     /**
-     * Replaces the resource field values from the lexicon without saving the resource.
+     * Finds or creates a lexicon entry object for the key, topic, and language.
      *
-     * @param modResource $object
-     * @param string $lang The language code to translate to
-     * @param bool $process_tags Whether or not to process MODX tags before saving.
+     * @param string $key The lexicon entry name
+     * @param string $topic The lexicon entry topic
+     * @param string $lang The lexicon entry language
+     * @param string $namespace The lexicon entry namespace
+     * @return modLexiconEntry|null|object
      */
-    public function translateObjectFields(modResource $object, $lang, $process_tags = false) {
-        foreach ($this->config['fields'] as $field) {
-            /** @var $alfo AutoLexiconResourceField */
-            $alfo = $this->getALFieldObject($object, $field, $lang);
-            $alfo->translate($process_tags);
+    public function getLexiconEntry($key, $topic, $lang, $namespace='autolexicon') {
+        $base_array = array(
+            'name' => $key,
+            'topic' => $topic,
+            'namespace' => $namespace,
+            'language' => $lang,
+        );
+        $entry = $this->modx->getObject('modLexiconEntry',$base_array);
+        if(!($entry instanceof modLexiconEntry)) {
+            /** @var $entry modLexiconEntry */
+            $entry = $this->modx->newObject('modLexiconEntry');
+            $entry->fromArray($base_array);
         }
+        if(!($entry instanceof modLexiconEntry)) {
+            $this->modx->log(modX::LOG_LEVEL_ERROR,"AutoLexicon could not create a lexicon entry for key {$key}, lang {$lang}, and topic {$topic}");
+        }
+        return $entry;
     }
-
     /*******************************************/
     /*               Utility Stuff             */
     /*******************************************/
@@ -352,3 +322,4 @@ class AutoLexicon {
         return $chunk;
     }
 }
+

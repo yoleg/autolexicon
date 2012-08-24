@@ -27,6 +27,8 @@ abstract class AutoLexiconEventHandler {
     public $modx = null;
     /** @var AutoLexicon A reference to the AutoLexicon object. */
     public $al = null;
+    /** @var AutoLexiconHandler A reference to the AutoLexiconHandler handler. */
+    public $handler = null;
     /** @var array A collection of properties to adjust AutoLexicon behaviour. */
     public $config = array();
     /**
@@ -43,6 +45,7 @@ abstract class AutoLexiconEventHandler {
         $this->modx =& $al->modx;
         $this->al =& $al;
         $this->config = $config;
+        $this->handler = $this->al->getClassHandler('modResource');
     }
     /**
      * Handles a MODX event and returns an error code if a problem occurred.
@@ -55,8 +58,10 @@ abstract class AutoLexiconEventHandler {
     abstract public function handleEvent($name, array $params);
 }
 
+// todo: cleanup non-configured fields & deleted TVs on empty trash
 class AutoLexiconEventHandlerWeb extends AutoLexiconEventHandler {
     public function handleEvent($name, array $params) {
+        if ($this->modx->context->get('key') == 'mgr') return null;
         $output = null;
             switch($name) {
                 case 'OnInitCulture':
@@ -88,18 +93,14 @@ class AutoLexiconEventHandlerWeb extends AutoLexiconEventHandler {
         // sets the cultureKey used for lexicon translation
         $this->modx->cultureKey = $lang;
         // tris to set the setting cultureKey for use in MODX tags. Doesn't work in all versions of MODX.
-        $this->modx->setOption('cultureKey', $lang);
+        $this->al->overrideOption('cultureKey', $lang);
         // separates resource caching for each language
-        $this->modx->setOption('cache_resource_key', ($this->config['resource_cache_key_prefix'] . $lang));
+        $this->al->overrideOption('cache_resource_key', ($this->al->config['resource_cache_key_prefix'] . $lang));
         // reloads the lexicon for the new language
-        $this->modx->getService('lexicon', 'modLexicon');
-        if ($this->modx->lexicon) {
-            // todo: extend to other topics
-            $this->modx->lexicon->load($lang . ':autolexicon:resource');
-        }
+        $this->al->_loadLexiconTopicOnce($lang, $this->handler->topic);
         // todo: extend to other settings
-        foreach($this->config['translate_settings'] as $setting) {
-            $this->modx->setOption($setting, $this->al->translateSetting($setting, $lang));
+        foreach($this->al->config['translate_settings'] as $setting) {
+            $this->al->overrideOption($setting, $this->al->translateSystemSetting($setting, $lang));
         }
     }
     public function _generateAliases($lang) {
@@ -119,9 +120,6 @@ class AutoLexiconEventHandlerWeb extends AutoLexiconEventHandler {
         if (MODX_API_MODE) {
             return;
         }
-        if ($this->modx->context->get('key') == 'mgr') {
-            return;
-        }
         // todo: specify that this is set via site-specific code or htaccess
         $lang = $this->modx->cultureKey;
         $this->_switchLanguage($lang);
@@ -136,15 +134,16 @@ class AutoLexiconEventHandlerWeb extends AutoLexiconEventHandler {
         // insert the lexicon key into each resource field to avoid extra tag parsing
         // todo: make sure right lang
         $current_lang = $this->modx->cultureKey;
-        $this->al->translateObjectFields($resource, $current_lang);
-//        $this->al->debug($resource, $current_lang);
+        $this->handler->translateObjectFields($resource, $current_lang);
     }
 }
 
 class AutoLexiconEventHandlerManager extends AutoLexiconEventHandler {
+    // todo-important: clear cache after element/resource save as well!!!
     /** @var array Resources scheduled for removal before the context is permanently removed. The lexicon entries are to be removed after the context is successfully removed. */
     public $resources_removed = array();
     public function handleEvent($name, array $params) {
+        if (!$this->modx->context->get('key') == 'mgr') return null;
         $output = null;
         switch($name) {
             case 'OnDocFormPrerender':
@@ -195,13 +194,13 @@ class AutoLexiconEventHandlerManager extends AutoLexiconEventHandler {
      * @return string The current language code.
      */
     public function _getCurrentManagerLang() {
-        $session_lang = $this->modx->getOption($this->config['session_edit_lang_key'], $_SESSION, $this->config['default_lang']);
-        $current_lang = in_array($session_lang, $this->config['langs']) ? $session_lang : $this->config['default_lang'];
-        if (isset($_GET['autolexicon_lang']) && in_array($_GET['autolexicon_lang'], $this->config['langs'])) {
+        $session_lang = $this->modx->getOption($this->al->config['session_edit_lang_key'], $_SESSION, $this->al->config['default_lang']);
+        $current_lang = in_array($session_lang, $this->al->config['langs']) ? $session_lang : $this->al->config['default_lang'];
+        if (isset($_GET['autolexicon_lang']) && in_array($_GET['autolexicon_lang'], $this->al->config['langs'])) {
             $current_lang = $_GET['autolexicon_lang'];
         }
         if ($current_lang != $session_lang) {
-            $_SESSION[$this->config['session_edit_lang_key']] = $current_lang;
+            $_SESSION[$this->al->config['session_edit_lang_key']] = $current_lang;
         }
         return $current_lang;
     }
@@ -216,7 +215,7 @@ class AutoLexiconEventHandlerManager extends AutoLexiconEventHandler {
     public function _createManagerButtons(modResource $resource, array $actions) {
         $outputLanguageItems = '';
         $current_lang = $this->_getCurrentManagerLang();
-        foreach ($this->config['langs'] as $lang) {
+        foreach ($this->al->config['langs'] as $lang) {
             $current = ($current_lang && $current_lang == $lang) ? true : false;
             $resourceUrl = $current ? '#' : (
                 '?a=' . $actions['resource/update'] . '&amp;id=' .
@@ -233,60 +232,10 @@ class AutoLexiconEventHandlerManager extends AutoLexiconEventHandler {
         return $outputLanguageItems;
     }
 
-    /**
-     * PERMANENTLY syncs resource with lexicon per AutoLexicon rules.
-     *
-     * @param modResource $resource
-     * @param $current_lang
-     */
-    public function _updateResource(modResource $resource, $current_lang) {
-        // todo: choose default for missing entries: leave blank, use default lang value, or static default
-        foreach ($this->config['fields'] as $field) {
-            /** @var $alfo AutoLexiconResourceField */
-            $alfo = $this->al->getALFieldObject($resource, $field, $current_lang);
-            $alfo->sync();
-        }
-        $resource->save();
-    }
-
-    /**
-     * Refreshes the cache for all the special resource cache keys used by AutoLexicon.
-     */
-    public function _refreshCache() {
-        $providers = array();
-        foreach ($this->config['langs'] as $lang) {
-            $providers[$this->config['resource_cache_key_prefix'] . $lang] = array();
-        }
-        ;
-        $this->modx->cacheManager->refresh($providers);
-        $this->modx->cacheManager->refresh();
-    }
-
-    public function _removeLexiconLinks(array $resource_ids) {
-        $name_array = array();
-        $prefix = '';
-        foreach ($resource_ids as $resource_id) {
-            $entry = array();
-            $entry[$prefix . 'name:LIKE'] = $this->al->getLexiconKey($resource_id, '');
-            $name_array[] = $entry;
-            $prefix = 'OR:';
-        }
-        $query = $this->modx->newQuery('modLexiconEntry', array(
-            'topic' => 'resource',
-            'namespace' => 'autolexicon',
-            $name_array,
-        ));
-        $entries = $this->modx->getCollection('modLexiconEntry', $query);
-        foreach ($entries as $entry) {
-            /** @var $entry modLexiconEntry */
-            $entry->remove();
-        }
-    }
 
     /*******************************************/
     /*               Manager Events            */
     /*******************************************/
-    // todo: add onloadculture event to manager
     public function OnDocFormPrerender(modResource $resource, array $params=array()) {
         /* grab manager actions IDs */
         $actions = $this->modx->request->getAllActionIDs();
@@ -297,47 +246,41 @@ class AutoLexiconEventHandlerManager extends AutoLexiconEventHandler {
         $output = '<div id="autolexicon-box">' . $managerButtons . '</div>';
         $this->modx->event->output($output);
         /* include CSS/JS */
-        $this->modx->regClientCSS($this->config['cssUrl'] . 'autolexicon.css?v=6');
-        $this->modx->regClientStartupScript($this->config['jsUrl'] . 'autolexicon.js?v=3');
+        $this->modx->regClientCSS($this->al->config['cssUrl'] . 'autolexicon.css?v=6');
+        $this->modx->regClientStartupScript($this->al->config['jsUrl'] . 'autolexicon.js?v=3');
         return null;
     }
 
     public function OnDocFormRender(modResource $resource, array $params=array()) {
         $lang = $this->_getCurrentManagerLang();
-        $this->al->translateObjectFields($resource, $lang);
+        $this->handler->translateObjectFields($resource, $lang);
     }
 
     public function OnManagerPageAfterRender(modManagerController $controller) {
-//        $old_lang = $this->modx->cultureKey;
-//        $lang = $this->_getCurrentManagerLang();
-//        $content = $controller->content;
-//        $content = $this->_parseLexiconTags($content, $lang);
-//        $controller->content = $content;
         return null;
     }
 
     public function OnBeforeDocFormSave(modResource $resource, array $params=array()) {
-//        $data = $this->modx->getOption('data',$params,array());
         return null;
     }
 
     public function OnDocFormSave(modResource $resource, array $params=array()) {
-        // todo: should this be skipped? reloadOnly is when template is switched without saving
         $current_lang = $this->_getCurrentManagerLang();
+        // todo: should this be skipped? reloadOnly is when template is switched without saving
         if (!$this->modx->getOption('reloadOnly',$params,false)) {
-            $this->_updateResource($resource, $current_lang);
-            $this->_refreshCache();
+            $this->handler->syncObject($resource, $current_lang);
+            $this->al->refreshCache();
         }
-        $this->al->translateObjectFields($resource, $current_lang);
+        $this->handler->translateObjectFields($resource, $current_lang);
         return null;
     }
 
     public function OnSiteRefresh() {
-        $this->_refreshCache();
+        $this->al->refreshCache();
     }
 
     public function OnEmptyTrash(array $deletedResourceIds) {
-        $this->_removeLexiconLinks($deletedResourceIds);
+        $this->handler->_removeLexiconLinks($deletedResourceIds);
     }
 
     public function OnContextBeforeRemove(modContext $context) {
@@ -353,33 +296,12 @@ class AutoLexiconEventHandlerManager extends AutoLexiconEventHandler {
     public function OnContextRemove(modContext $context) {
         if (isset($this->resources_removed[$context->get('key')])) {
             $resources_removed = $this->resources_removed[$context->get('key')];
-            $this->_removeLexiconLinks($resources_removed);
+            $this->handler->_removeLexiconLinks($resources_removed);
         } else {
             $this->modx->log(modX::LOG_LEVEL_ERROR, "Failed to remove resources for deleted context " . $context->get('key'));
         }
     }
 
-    public function _getLexiconTagRegEx($topic = 'resource') {
-        return '\[\[[\!]*\%' . $this->config['lexicon_key_prefix'] . '([0-9]+)\_([\w-]+)\?\s+(' .
-            '(\&topic\=\`' . $topic . '\`\s+&namespace=\`autolexicon\`)' .
-            '|' .
-            '(&namespace=\`autolexicon\`\s+\&topic\=\`' . $topic . '\`)' .
-            ')\]\]';
-    }
-
-    public function _parseLexiconTags($string, $topic = 'resource', $lang) {
-        $regex = '/' . $this->_getLexiconTagRegEx() . '/';
-        preg_match_all($regex, $string, $matches, PREG_SET_ORDER);
-        foreach ($matches as $val) {
-            $full_lexicon_tag = $val[0];
-            $resource_id = $val[1];
-            $field = $val[2];
-            $lexicon_key = $this->al->getLexiconKey($resource_id, $field);
-            $lexicon_value = $this->al->getLexiconValue($lexicon_key, $topic, $lang);
-            $string = str_replace($full_lexicon_tag, $lexicon_value, $string);
-        }
-        return $string;
-    }
 
 
 
