@@ -5,9 +5,7 @@ AutoLexicon avoids all of the duplication that comes with having separate contex
 NOT READY FOR PRODUCTION USE! Make sure to backup before installing and frequently during testing.
 
 Instructions:
-    - Create an .htaccess file and gateway plugin just like for Babel, except do NOT switch the context.
-    The important bit is that $modx->cultureKey is set to the proper language before AutoLexicon's OnInitCulture event is run.
-    If the $_REQUEST['cultureKey'] parameter is set early enough, MODX usually will do this automatically.
+- Create an .htaccess file and gateway plugin just like for Babel, except do NOT switch the context.The important bit is that $modx->cultureKey is set to the proper language before AutoLexicon's OnInitCulture event is run. If the $_REQUEST['cultureKey'] parameter is set early enough, MODX usually will do this automatically.
 
 Known bugs:
     - Cache must be cleared manually after editing elements (chunks, snippets, etc...)
