@@ -54,10 +54,6 @@ $values = array(
         'label' => 'Site Settings to Translate',
         'default' => 'base_url,site_url,site_name',
     ),
-    'translate_settings' => array(
-        'label' => 'Site Settings to Translate',
-        'default' => 'base_url,site_url,site_name',
-    ),
     'enabled' => array(
         'label' => 'Enable AutoLexicon',
         'default' => true,

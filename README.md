@@ -11,6 +11,7 @@ Known bugs:
     - Cache must be cleared manually after editing elements (chunks, snippets, etc...)
     - Deleting resources or contexts does not delete old lexicon entries
     - Uninstalling package does not allow reverting the substituted resources
+    - New topics and languages do not appear for editing automatically in the lexicon editor.
 
 
 Shortcomings:

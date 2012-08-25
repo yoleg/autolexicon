@@ -32,8 +32,6 @@
  * @todo complete autolexicon.language_xx entries for every language
  */
 
-$_lang['autolexicon.tv_caption'] = 'AutoLexicon Translation Links';
-$_lang['autolexicon.tv_description'] = 'Maintained by AutoLexicon plugin. Please do not change!';
 $_lang['autolexicon.create_translation'] = 'Create translation';
 $_lang['autolexicon.unlink_translation'] = 'Unlink translation';
 $_lang['autolexicon.link_translation_manually'] = 'or <strong>link translation manually</strong>:';
