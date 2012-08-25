@@ -22,6 +22,7 @@
  *
  * @package autolexicon
  */
+require_once dirname(__FILE__).'/autolexicon.class.php';
 abstract class AutoLexiconEventHandler {
     /** @var modX A reference to the modX object. */
     public $modx = null;

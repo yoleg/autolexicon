@@ -39,7 +39,7 @@ try {
             'Snippets' => true,
             'Plugins' => true,
             'Menus' => false,
-            'SetupOptions' => false,
+            'SetupOptions' => true,
             'Validator' => false, // checks for installed packages
             'Resolvers' => false,
             /* not yet working */
@@ -56,17 +56,17 @@ try {
             'build' => $build_root,
         ),
         'attributes' => array(
-        'license' => 'GPL version 3 or (at your option) any later version of GPL (http://www.gnu.org/licenses/gpl.html). A copy of the GPL v. 3 license is included in core/components/'.PKG_NAME_LOWER.'/docs/license.txt.',
-    				),
+            'license' => 'GPL version 3 or (at your option) any later version of GPL (http://www.gnu.org/licenses/gpl.html). A copy of the GPL v. 3 license is included in core/components/'.PKG_NAME_LOWER.'/docs/license.txt.',
+    	),
         'resolvers' => array(
             'resources.resolver.php',
             'system_settings.resolver.php',
             'finish.resolver.php',
-    			),
+    	),
         'files_config' => array(),
         'default_attributes' => array(),
         'category_attributes' => array(
-        xPDOTransport::UPDATE_OBJECT => true,
+            xPDOTransport::UPDATE_OBJECT => true,
         ),
         'object_attributes' => array(
         'Chunks' => array(

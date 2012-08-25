@@ -15,7 +15,7 @@ class AutoLexiconResourceHandler extends AutoLexiconHandler {
             'prefix' => null,
             'cleanup_empty' => $modx->getOption('autolexicon.cleanup_empty', null, true),
             'sync_fields' => $al->commasToArray($modx->getOption('autolexicon.sync_fields', null, 'pagetitle,uri,alias,content,longtitle,description,introtext,menutitle')),
-            'sync_tvs' => $al->commasToArray($modx->getOption('autolexicon.sync_tvs', null, 'content_below')),
+            'sync_tvs' => $al->commasToArray($modx->getOption('autolexicon.sync_tvs', null, '')),
             'replace_fields' => $al->commasToArray($modx->getOption('autolexicon.replace_fields', null, 'content,longtitle,description,introtext,menutitle')),
             'required_fields' => $al->commasToArray($modx->getOption('autolexicon.required_fields', null, 'pagetitle,alias,uri')),
             'default_field' => $modx->getOption('autolexicon.default_field', null, 'pagetitle'),

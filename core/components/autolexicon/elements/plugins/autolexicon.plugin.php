@@ -54,6 +54,8 @@ $events = array(
 // todo-important: remove debug req.
 if (!$modx->user->get('id') == 1) return;
 
+if (!$modx->getOption('autolexicon.enabled',null,false)) return;
+
 $autolexicon = $modx->getService('autolexicon', 'AutoLexicon', $modx->getOption('autolexicon.core_path', null, $modx->getOption('core_path') . 'components/autolexicon/') . 'model/autolexicon/', $scriptProperties);
 if (!($autolexicon instanceof AutoLexicon)) return;
 

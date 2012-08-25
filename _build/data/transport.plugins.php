@@ -7,21 +7,21 @@
  */
 $plugins= array();
 $plugins['AutoLexicon'] = array(
-    'description' => 'Iterates through a template chunk of each configured language.',
+    'description' => 'Loads lexicon entries when resources are loaded, and saves lexicon entries when resources are saved .',
     'properties' => array(
     ),
     'events' => array(
-        'OnInitCulture' => array('priority' => 10,),
-        'OnHandleRequest' => array('priority' => 10,),
-        'OnLoadWebDocument' => array('priority' => 10,),
-        'OnDocFormPrerender' => array('priority' => 10,),
-        'OnDocFormRender' => array('priority' => 10,),
-        'OnDocFormSave' => array('priority' => 10,),
-        'OnSiteRefresh' => array('priority' => 10,),
-        'OnEmptyTrash' => array('priority' => 10,),
-        'OnContextBeforeRemove' => array('priority' => 10,),
-        'OnContextRemove' => array('priority' => 10,),
-        'OnResourceDuplicate' => array('priority' => 10,),
+        'OnInitCulture' => array('priority' => 20,),
+        'OnHandleRequest' => array('priority' => 20,),
+        'OnLoadWebDocument' => array('priority' => 20,),
+        'OnDocFormPrerender' => array('priority' => 20,),
+        'OnDocFormRender' => array('priority' => 20,),
+        'OnDocFormSave' => array('priority' => 20,),
+        'OnSiteRefresh' => array('priority' => 20,),
+        'OnEmptyTrash' => array('priority' => 20,),
+        'OnContextBeforeRemove' => array('priority' => 20,),
+        'OnContextRemove' => array('priority' => 20,),
+        'OnResourceDuplicate' => array('priority' => 20,),
     ),
 );
 return $plugins;

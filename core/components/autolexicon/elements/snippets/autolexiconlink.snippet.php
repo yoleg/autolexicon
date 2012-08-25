@@ -20,10 +20,6 @@
  * @var modX $modx
  * @var array $scriptProperties
  */
-
-$autolexicon = $modx->getService('autolexicon', 'AutoLexicon', $modx->getOption('autolexicon.core_path', null, $modx->getOption('core_path') . 'components/autolexicon/') . 'model/autolexicon/', $scriptProperties);
-if (!($autolexicon instanceof AutoLexicon)) return;
-
 $lang = $modx->getOption('lang',$scriptProperties,'');
 if (empty($lang)) $lang = $modx->cultureKey;
 $id = $modx->getOption('id',$scriptProperties,'');
@@ -35,6 +31,14 @@ $args = is_array($args) ? $args : array();
 $options = $modx->getOption('options',$scriptProperties,'[]');
 $options = $modx->fromJSON($options);
 $options = is_array($options) ? $options : array();
+
+if (!$modx->getOption('autolexicon.enabled',null,false)) {
+    return $modx->makeUrl($modx->resource->get('id'),'',$args,$scheme,$options);
+}
+
+$autolexicon = $modx->getService('autolexicon', 'AutoLexicon', $modx->getOption('autolexicon.core_path', null, $modx->getOption('core_path') . 'components/autolexicon/') . 'model/autolexicon/', $scriptProperties);
+if (!($autolexicon instanceof AutoLexicon)) return;
+
 if (in_array($lang, $autolexicon->config['langs'])) {
     $o = $autolexicon->makeUrl($id, $lang, $args, $scheme, $options);
 } else {
