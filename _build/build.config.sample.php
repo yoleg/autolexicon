@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 /**
  * Define the MODX path constants necessary for installation
  *

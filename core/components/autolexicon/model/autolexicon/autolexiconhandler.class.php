@@ -14,16 +14,24 @@ class AutoLexiconResourceHandler extends AutoLexiconHandler {
             'topic' => 'resource',
             'prefix' => null,
             'cleanup_empty' => $modx->getOption('autolexicon.cleanup_empty', null, true),
-            'sync_fields' => $al->commasToArray($modx->getOption('autolexicon.sync_fields', null, 'pagetitle,uri,alias,content,longtitle,description,introtext,menutitle')),
-            'sync_tvs' => $al->commasToArray($modx->getOption('autolexicon.sync_tvs', null, '')),
-            'replace_fields' => $al->commasToArray($modx->getOption('autolexicon.replace_fields', null, 'content,longtitle,description,introtext,menutitle')),
+            'translate_fields' => $al->commasToArray($modx->getOption('autolexicon.translate_fields', null, 'pagetitle,uri,alias,content,longtitle,description,introtext,menutitle')),
+            'translate_tvs' => $al->commasToArray($modx->getOption('autolexicon.translate_tvs', null, '')),
+            'replace_fields' => $al->commasToArray($modx->getOption('autolexicon.replace_fields', null, true)),
+            'replace_tvs' => $al->commasToArray($modx->getOption('autolexicon.replace_tvs', null, false)),
+            'never_replace_fields_list' => $al->commasToArray($modx->getOption('autolexicon.never_replace_fields_list', null, 'pagetitle,uri,alias')),
             'required_fields' => $al->commasToArray($modx->getOption('autolexicon.required_fields', null, 'pagetitle,alias,uri')),
             'default_field' => $modx->getOption('autolexicon.default_field', null, 'pagetitle'),
             'set_as_default' => $al->commasToArray($modx->getOption('autolexicon.set_as_default', null, 'menutitle')),
             'null_value' => $modx->getOption('autolexicon.null_value', null, 'NULL'),
         ),$config);
         // todo: allow config fields for different topics
-        $config['fields'] = array_merge($config['sync_tvs'], $config['sync_fields']);
+        $config['fields'] = array_merge($config['translate_tvs'], $config['translate_fields']);
+        if (!$config['replace_fields']) {
+            $config['never_replace_fields_list'] = array_merge($config['never_replace_fields_list'],$config['translate_fields']);
+        }
+        if (!$config['replace_tvs']) {
+            $config['never_replace_fields_list'] = array_merge($config['never_replace_fields_list'],$config['translate_tvs']);
+        }
         parent::__construct($al,$config);
     }
 }
@@ -48,7 +56,7 @@ class AutoLexiconHandler {
             'topic' => 'resource',
             'separator' => '.',
             'prefix' => null,
-            'sync_fields' => array(),
+            'translate_fields' => array(),
             'skip_value_replacement' => array(),
             'required_fields' => array(),
             'default_field' => null,
@@ -143,6 +151,7 @@ class AutoLexiconHandler {
      * @return AutoLexiconField
      */
     public function getALFieldObject(xPDOObject $object, $field, $lang) {
+		// todo-important: handle new resources
         if (empty($field) || empty($lang)) {
             throw new AutoLexiconException('Empty parameters for getALFieldObject');
         }

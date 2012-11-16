@@ -41,7 +41,7 @@ try {
             'Menus' => false,
             'SetupOptions' => true,
             'Validator' => false, // checks for installed packages
-            'Resolvers' => false,
+            'Resolvers' => true,
             /* not yet working */
             'AccessPolicies' => false,
             'PolicyTemplates' => false,
@@ -59,7 +59,6 @@ try {
             'license' => 'GPL version 3 or (at your option) any later version of GPL (http://www.gnu.org/licenses/gpl.html). A copy of the GPL v. 3 license is included in core/components/'.PKG_NAME_LOWER.'/docs/license.txt.',
     	),
         'resolvers' => array(
-            'resources.resolver.php',
             'system_settings.resolver.php',
             'finish.resolver.php',
     	),

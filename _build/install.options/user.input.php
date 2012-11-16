@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 /*
  * BaseSite
  *
@@ -41,7 +41,7 @@
  * in any php resolvers with $modx->getOption('field_name', $options, 'default_value').
  */
 /* set some default values */
-$values = array(
+$settings = array(
     'default_language' => array(
         'label' => 'Default Language',
         'default' => $modx->getOption('cultureKey'),
@@ -64,20 +64,24 @@ switch ($options[xPDOTransport::PACKAGE_ACTION]) {
     case xPDOTransport::ACTION_INSTALL:
     case xPDOTransport::ACTION_UPGRADE:
         /** @var $setting modSystemSetting */
-        foreach ($values as $key => $config) {
+        foreach ($settings as $key => $config) {
             $default = isset($config['default']) ? $config['default'] : '';
             $label = isset($config['label']) ? $config['label'] : $key;
-            $value = $modx->getOption($key,null,$default);
+            $prefix = 'formitfastpack.install.';
+            $value = $modx->getOption($prefix.$key,null,$default);
             $unique_key = str_replace('.','_',$key);
-            $output .= '<p style="margin-bottom: 1em;"><label for="'.$unique_key.'">'.$label.':</label>';
+            $all = 'style="float: left; margin-right: 10px;"';
+            $label = '<label '.$all.' for="'.$unique_key.'">'.$label.':</label>';
             if (!is_bool($default)) {
-                $output .='<input type="text" name="'.$key.'" id="'.$unique_key.'" width="300" value="'.$value.'" />';
+                $input ='<input '.$all.' type="text" name="'.$key.'" id="'.$unique_key.'" width="300" value="'.$value.'" />';
+                $output = $label.$input;
             } else {
-                $output .='<input type="hidden" name="'.$key.'" id="'.$unique_key.'" value="" />';
-                $checked = $value ? 'checked' : '';
-                $output .='<input type="checkbox" name="'.$key.'" id="'.$unique_key.'" value="'.$value.'" checked="'.$checked.'" />';
+                $input ='<input '.$all.' type="hidden" name="'.$key.'" value="" />';
+                $checked = $value ? 'checked="checked"' : '';
+                $input .='<input '.$all.' type="checkbox" name="'.$key.'" id="'.$unique_key.'" value="1" '.$checked.' />';
+                $output = $input . $label;
             }
-            $output .='</p>';
+            $output ='<div style="margin-bottom: 1em; float: left;">'.$output.'</div>';
         }
 		break;
     case xPDOTransport::ACTION_UNINSTALL: break;

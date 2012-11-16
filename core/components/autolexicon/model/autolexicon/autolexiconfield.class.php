@@ -14,7 +14,7 @@ class AutoLexiconResourceField extends AutoLexiconField {
         if (!isset($this->config[$key])) {
             switch ($key) {
                 case 'is_tv':
-                    $this->config[$key] = !in_array($this->field, $this->handler->config['sync_fields']);
+                    $this->config[$key] = !in_array($this->field, $this->handler->config['translate_fields']);
                     break;
             }
         }
@@ -93,7 +93,7 @@ abstract class AutoLexiconField {
                     $value = in_array($this->field, $this->handler->config['required_fields']);
                     break;
                 case 'replace_field':
-                    $value = in_array($this->field, $this->handler->config['replace_fields']);
+                    $value = !in_array($this->field, $this->handler->config['never_replace_fields_list']);
                     break;
                 case 'set_as_default':
                     $value = in_array($this->field, $this->handler->config['set_as_default']) ? $this->handler->config['default_field'] : false;

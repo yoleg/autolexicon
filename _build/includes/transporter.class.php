@@ -431,15 +431,25 @@ class TransportDataProcessor {
 
     public function processSettings($key,$config,$idx=0){
         /** @var $setting modSystemSetting */
-        $value = is_array($config) ? $config['value'] : $config;
+        if (is_array($config)) {
+            $value = isset($config['value']) ? $config['value'] : '';
+        } else {
+            $value = $config;
+        }
+        if (is_bool($value)) {
+            $xtype = 'combo-boolean';
+        } else {
+            $xtype = 'textfield';
+        }
         $setting = $this->_processObject($config,array(
             'default_field' => 'value',
             'class' => 'modSystemSetting',
             'defaults' => array(
                 'key' => $key,
                 'value' => '',
+                'area' => '',
                 'namespace' => PKG_NAME_LOWER,
-                'xtype' => is_bool($value) ? 'boolean' : 'textfield',
+                'xtype' => $xtype,
             ),
         ));
         return $setting;

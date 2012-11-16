@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 /**
  * @var MODx $modx
  * @var array $sources

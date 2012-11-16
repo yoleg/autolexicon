@@ -57,6 +57,10 @@ abstract class AutoLexiconEventHandler {
      * @return mixed
      */
     abstract public function handleEvent($name, array $params);
+    public function switchCacheKey($lang) {
+        // separates resource caching for each language
+        $this->al->overrideOption('cache_resource_key', ($this->al->config['resource_cache_key_prefix'] . $lang));
+    }
 }
 
 // todo: cleanup non-configured fields & deleted TVs on empty trash
@@ -95,8 +99,7 @@ class AutoLexiconEventHandlerWeb extends AutoLexiconEventHandler {
         $this->modx->cultureKey = $lang;
         // tris to set the setting cultureKey for use in MODX tags. Doesn't work in all versions of MODX.
         $this->al->overrideOption('cultureKey', $lang);
-        // separates resource caching for each language
-        $this->al->overrideOption('cache_resource_key', ($this->al->config['resource_cache_key_prefix'] . $lang));
+        $this->switchCacheKey($lang);
         // reloads the lexicon for the new language
         $this->al->_loadLexiconTopicOnce($lang, $this->handler->topic);
         // todo: extend to other settings
@@ -179,6 +182,11 @@ class AutoLexiconEventHandlerManager extends AutoLexiconEventHandler {
                 $context =& $this->modx->event->params['context'];
                 if (!$context) {break;}
                 $this->{$this->modx->event->name}($context);
+                break;
+            // todo: would another event work better?
+            case 'OnManagerPageInit':
+                $lang = $this->_getCurrentManagerLang();
+                $this->switchCacheKey($lang);
                 break;
             case 'OnManagerPageAfterRender':
                 $controller =& $this->modx->event->params['controller'];

@@ -92,7 +92,7 @@ class AutoLexicon {
             'jsUrl' => $assetsUrl . 'js/',
             'translate_settings' => $this->commasToArray($modx->getOption('autolexicon.translate_settings', null, 'base_url,site_url,site_name')),
             'session_edit_lang_key' => $modx->getOption('autolexicon.session_edit_lang_key', null, 'autolexicon.edit_lang'),
-            'resource_cache_key_prefix' => $modx->getOption('autolexicon.resource_cache_key_prefix', null, 'resource-'),
+            'resource_cache_key_prefix' => $modx->getOption('autolexicon.resource_cache_key_prefix', null, 'default/autolexicon/'),
             'langs' => $this->commasToArray($modx->getOption('autolexicon.languages', null, 'en, es')),
             'default_lang' => $this->modx->getOption('autolexicon.default_language', null, $this->modx->getOption('cultureKey', null, 'en')),
         ), $config);

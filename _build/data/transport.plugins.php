@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 /**
  * @package AutoLexicon
  * @var MODx $modx
@@ -14,6 +14,7 @@ $plugins['AutoLexicon'] = array(
         'OnInitCulture' => array('priority' => 20,),
         'OnHandleRequest' => array('priority' => 20,),
         'OnLoadWebDocument' => array('priority' => 20,),
+        'OnManagerPageInit' => array('priority' => 20,),
         'OnDocFormPrerender' => array('priority' => 20,),
         'OnDocFormRender' => array('priority' => 20,),
         'OnDocFormSave' => array('priority' => 20,),
