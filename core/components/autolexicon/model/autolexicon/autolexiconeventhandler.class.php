@@ -22,6 +22,7 @@
  *
  * @package autolexicon
  */
+// todo: restrict manager plugin events to resource editing only
 require_once dirname(__FILE__).'/autolexicon.class.php';
 abstract class AutoLexiconEventHandler {
     /** @var modX A reference to the modX object. */
@@ -183,15 +184,17 @@ class AutoLexiconEventHandlerManager extends AutoLexiconEventHandler {
                 if (!$context) {break;}
                 $this->{$this->modx->event->name}($context);
                 break;
-            // todo: would another event work better?
-            case 'OnManagerPageInit':
-                $lang = $this->_getCurrentManagerLang();
-                $this->switchCacheKey($lang);
+            // todo: would another event work better? check for resource/x?
+            case 'OnManagerPageInit': // before ondocformprerender (?)
+				$lang = $this->_getCurrentManagerLang();
+				$this->switchCacheKey($lang);
                 break;
-            case 'OnManagerPageAfterRender':
+            case 'OnManagerPageAfterRender': // after ondocformsave (?)
                 $controller =& $this->modx->event->params['controller'];
                 if (!$controller) {break;}
-                $this->OnManagerPageAfterRender($controller);
+				if ($controller->config['controller'] == 'resource/update') {
+					$this->OnManagerPageAfterRender($controller);
+				}
                 break;
 
         }
@@ -257,15 +260,30 @@ class AutoLexiconEventHandlerManager extends AutoLexiconEventHandler {
         /* include CSS/JS */
         $this->modx->regClientCSS($this->al->config['cssUrl'] . 'autolexicon.css?v=6');
         $this->modx->regClientStartupScript($this->al->config['jsUrl'] . 'autolexicon.js?v=3');
-        return null;
     }
 
     public function OnDocFormRender(modResource $resource, array $params=array()) {
+		// OnDocFormRender
+		// todo: check if resource translated, and if not, create translations
+		/* do not render buttons for new resources */
+		if (!$resource->get('id')) return;
         $lang = $this->_getCurrentManagerLang();
         $this->handler->translateObjectFields($resource, $lang);
+		/** @var $tv modTemplateVar */
+		$tv = $this->modx->getObject('modTemplateVar', array('name' => 'test'));
+		$tv->setValue($resource->get('id'), 'testvalue');
+        return null;
     }
 
     public function OnManagerPageAfterRender(modManagerController $controller) {
+		// TVs cannot be replaced by substituting in memory. Must be replaced via search-&-replace
+		// example tv tag output: [[!%al.resource.11.test? &amp;topic=`resource` &amp;namespace=`autolexicon`]]
+//		$test = '[[!%al.resource.11.pagetitle? &topic=`resource` &namespace=`autolexicon`]]';
+		$regex1 = $this->handler->_getLexiconTagRegEx();
+		$regex2 = str_replace('[\&]','[\&]amp[\;]',$regex1);
+		$ignore_fields = array_merge($this->handler->config['never_replace_fields_list'],$this->handler->config['set_as_default']);
+		$controller->content = $this->handler->_parseLexiconTags($controller->content,$this->_getCurrentManagerLang(),$regex1,$ignore_fields);
+		$controller->content = $this->handler->_parseLexiconTags($controller->content,$this->_getCurrentManagerLang(),$regex2,$ignore_fields);
         return null;
     }
 

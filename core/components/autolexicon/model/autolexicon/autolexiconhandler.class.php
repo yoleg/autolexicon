@@ -196,20 +196,29 @@ class AutoLexiconHandler {
     }
 
     public function _getLexiconTagRegEx() {
-        return '\[\[[\!]*\%' . $this->prefix . '([0-9]+)\_([\w-]+)\?\s+(' .
-            '(\&topic\=\`' . $this->topic . '\`\s+&namespace=\`autolexicon\`)' .
-            '|' .
-            '(&namespace=\`autolexicon\`\s+\&topic\=\`' . $this->topic . '\`)' .
+		$prefix = str_replace('.','\.',$this->prefix);
+		$namespace = 'autolexicon';
+		$part_t = '[\&]topic\=\`' . $this->topic . '\`';
+		$part_n = '[\&]namespace\=\`' . $namespace . '\`';
+		return '\[\[[\!]*\%' . $prefix . '([0-9]+)\.([\w-]+)\?\s*(' .
+			'('.$part_t.'\s*'.$part_n.')|'.
+			'('.$part_n.'\s*'.$part_t.')'.
             ')\]\]';
     }
 
-    public function _parseLexiconTags($string, $lang) {
-        $regex = '/' . $this->_getLexiconTagRegEx() . '/';
+    public function _parseLexiconTags($string, $lang, $regex=null, $ignore_fields=null) {
+		if (is_null($regex)) {
+			$regex = $this->_getLexiconTagRegEx();
+		}
+        $regex = '/' . $regex . '/';
         preg_match_all($regex, $string, $matches, PREG_SET_ORDER);
         foreach ($matches as $val) {
             $full_lexicon_tag = $val[0];
             $object_id = $val[1];
             $field = $val[2];
+			if ($fields && in_array($field,$ignore_fields)) {
+				continue;
+			}
             $lexicon_key = $this->getLexiconKey($object_id, $field);
             $lexicon_value = $this->getLexiconValue($lexicon_key, $lang);
             $string = str_replace($full_lexicon_tag, $lexicon_value, $string);
