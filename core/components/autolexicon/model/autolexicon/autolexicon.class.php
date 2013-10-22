@@ -37,11 +37,10 @@ class AutoLexiconException extends Exception {
 
 require_once dirname(__FILE__) . '/autolexiconeventhandler.class.php';
 require_once dirname(__FILE__) . '/autolexiconhandler.class.php';
-// todo-important: do not store lexicon entries for empty fields! (with setting)
-// todo: make sure required fields are never empty in lexicon
-// todo-important: make alias in non-default language not update from DB via javascript
+// todo: add manager page for managing translations easier
+// todo: make alias in non-default language not update from DB via javascript
 // todo: add support for MODX lexicon manager ANY language
-// todo: VersionX integration
+// todo: VersionX integration (done?)
 class AutoLexicon {
     /**
      * @access protected
@@ -117,7 +116,7 @@ class AutoLexicon {
         return $this->_cache_event_handler[$class];
     }
 
-    // todo: finish
+    // todo: finish support for custom object handlers w/ separate configs for each object/ topic
     /**
      * @param string $class
      * @throws AutoLexiconException
@@ -149,7 +148,7 @@ class AutoLexicon {
         $this->modx->cacheManager->refresh();
     }
 
-    // todo: add support for other contexts
+    // todo: add url-generating for any context (instead of just current one)
     /**
      * Generates a URL to another language for THIS context only.
      *
@@ -195,7 +194,6 @@ class AutoLexicon {
         $topic = 'setting';
         $this->_loadLexiconTopicOnce($lang, $topic, true);
         $output = null;
-        // todo: move prefixes to config
         $prefixes = array(
             $prefix.'user.'.$this->modx->user->get('id').'.',
             $prefix.'context.'.$this->modx->context->get('key').'.',

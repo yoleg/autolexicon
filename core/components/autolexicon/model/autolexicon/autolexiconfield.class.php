@@ -22,8 +22,6 @@ class AutoLexiconResourceField extends AutoLexiconField {
     }
 
     public function _setObjectField($value, $allow_save = false) {
-        // todo-important: fix TV storage (fails to save lexicon key)
-        // todo-important: do not set TV if matches default
         if ($this->getConfig('is_tv')) {
             /** @var modTemplateVar $tv */
             $tv = $this->modx->getObject('modTemplateVar', array('name' => $this->field));
@@ -37,7 +35,6 @@ class AutoLexiconResourceField extends AutoLexiconField {
             parent::_setObjectField($value);
         }
     }
-
     public function _getObjectFieldValue() {
         if ($this->getConfig('is_tv')) {
             $output = $this->object->getTVValue($this->field);
@@ -46,7 +43,7 @@ class AutoLexiconResourceField extends AutoLexiconField {
         }
         return $output;
     }
-
+	// todo: cleanup lexicon storage of default TV values
 }
 
 
@@ -142,12 +139,11 @@ abstract class AutoLexiconField {
         }
         return false;
     }
-
     public function _setLexiconEntryValue(modLexiconEntry $entry, $new_value) {
         $new_value = (string)$new_value ? $new_value : '';
         // do not store empty values if avoidable
         $new = $entry->get('id');
-        if (empty($new_value) && $this->handler->config['cleanup_empty'] && $new_value !== $this->handler->config['null_value']) {
+        if ($this->_lexiconValueNeedsRemoval($new_value)) {
             if ($new) {
                 $entry->remove();
             }
@@ -159,8 +155,20 @@ abstract class AutoLexiconField {
         $entry->set('value', $new_value);
         $entry->save();
     }
+	public function _lexiconValueNeedsRemoval($new_value) {
+		if (!empty($new_value)) {
+			return False;
+		}
+		if (!$this->handler->config['cleanup_empty']) {
+			return False;
+		}
+		if ($new_value === $this->handler->config['null_value']) {
+			return False;
+		}
+		return True;
+	}
 
-    public function _getObjectFieldValue() {
+	public function _getObjectFieldValue() {
         return $this->object->get($this->field);
     }
 
@@ -232,7 +240,6 @@ abstract class AutoLexiconField {
         // create empty slots for the other languages if they don't already exist
         $old_value = $this->_getLexiconValue();
         // sync other languages
-        // todo: only sync with default lang
         foreach ($this->al->config['langs'] as $other_lang) {
             if ($other_lang == $this->lang) {
                 continue;

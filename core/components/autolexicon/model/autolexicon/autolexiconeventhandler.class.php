@@ -22,7 +22,6 @@
  *
  * @package autolexicon
  */
-// todo: restrict manager plugin events to resource editing only
 require_once dirname(__FILE__).'/autolexicon.class.php';
 abstract class AutoLexiconEventHandler {
     /** @var modX A reference to the modX object. */
@@ -64,7 +63,6 @@ abstract class AutoLexiconEventHandler {
     }
 }
 
-// todo: cleanup non-configured fields & deleted TVs on empty trash
 class AutoLexiconEventHandlerWeb extends AutoLexiconEventHandler {
     public function handleEvent($name, array $params) {
         if ($this->modx->context->get('key') == 'mgr') return null;
@@ -103,11 +101,21 @@ class AutoLexiconEventHandlerWeb extends AutoLexiconEventHandler {
         $this->switchCacheKey($lang);
         // reloads the lexicon for the new language
         $this->al->_loadLexiconTopicOnce($lang, $this->handler->topic);
-        // todo: extend to other settings
+        // important: allow to translate any random settings
         foreach($this->al->config['translate_settings'] as $setting) {
             $this->al->overrideOption($setting, $this->al->translateSystemSetting($setting, $lang));
         }
     }
+    public function _aliasesNeedGenerating($lang) {
+		if ($lang != $this->al->config['default_lang']) {
+			return True;
+		}
+		$not_replaced = $this->handler->config['never_replace_fields_list'];
+		if (!in_array('uri', $not_replaced) || !in_array('alias', $not_replaced)) {
+			return True;
+		}
+		return False;
+	}
     public function _generateAliases($lang) {
         $aliases = array();
         foreach ($this->modx->aliasMap as $default_uri => $id) {
@@ -125,26 +133,34 @@ class AutoLexiconEventHandlerWeb extends AutoLexiconEventHandler {
         if (MODX_API_MODE) {
             return;
         }
-        // todo: specify that this is set via site-specific code or htaccess
         $lang = $this->modx->cultureKey;
-        $this->_switchLanguage($lang);
+		if (in_array($lang, $this->al->config['langs'])) {
+			$this->_switchLanguage($lang);
+		}
     }
 
     public function OnHandleRequest() {
         $lang = $this->modx->cultureKey;
-        $this->_generateAliases($lang);
+		if (in_array($lang, $this->al->config['langs'])) {
+			if ($this->_aliasesNeedGenerating($lang)) {
+				$this->_generateAliases($lang);
+			}
+		}
     }
 
     public function OnLoadWebDocument(modResource $resource) {
         // insert the lexicon key into each resource field to avoid extra tag parsing
-        // todo: make sure right lang
         $current_lang = $this->modx->cultureKey;
-        $this->handler->translateObjectFields($resource, $current_lang);
+		if (in_array($current_lang, $this->al->config['langs'])) {
+			$this->handler->translateObjectFields($resource, $current_lang);
+		}
     }
 }
 
+// todo: avoid loading entire lexicon if many resources (separate cache?)
+// important: cleanup non-configured fields & deleted TVs on empty trash
+// todo: error recovery: prevent lexicon tags from being inserted or saved when no lexicon tag exists
 class AutoLexiconEventHandlerManager extends AutoLexiconEventHandler {
-    // todo-important: clear cache after element/resource save as well!!!
     /** @var array Resources scheduled for removal before the context is permanently removed. The lexicon entries are to be removed after the context is successfully removed. */
     public $resources_removed = array();
     public function handleEvent($name, array $params) {
@@ -157,14 +173,20 @@ class AutoLexiconEventHandlerManager extends AutoLexiconEventHandler {
             case 'OnDocFormSave':
                 $resource =& $this->modx->event->params['resource'];
                 if (!$resource) {
-                    break;
-                }
-                $output = $this->{$this->modx->event->name}($resource, $this->modx->event->params);
+					break;
+				}
+				$output = $this->{$name}($resource, $this->modx->event->params);
                 break;
-            case 'OnPageNotFound':
+            case 'OnManagerPageInit': // before ondocformprerender (?)
+				// needed to have good resource/ chunk/ element cache.
+				// Is this actually useful, since we are clearing the cache anyways?
+				$lang = $this->_getCurrentManagerLang();
+				$this->switchCacheKey($lang);
                 break;
-            case 'OnSiteRefresh':
-                $this->OnSiteRefresh();
+            case 'OnManagerPageAfterRender': // after ondocformsave (?)
+                $controller =& $this->modx->event->params['controller'];
+                if (!$controller) {break;}
+				$this->OnManagerPageAfterRender($controller);
                 break;
             case 'OnResourceDuplicate':
                 /* remove translation links to non-existing resources */
@@ -172,6 +194,11 @@ class AutoLexiconEventHandlerManager extends AutoLexiconEventHandler {
                 $oldResource =& $this->modx->event->params['oldResource'];
                 $this->OnDocFormSave($newResource);
                 break;
+			case 'OnPageNotFound':
+			   break;
+		    case 'OnSiteRefresh':
+			   $this->OnSiteRefresh();
+			   break;
             case 'OnEmptyTrash':
                 /* remove translation links to non-existing resources */
                 $deletedResourceIds =& $this->modx->event->params['ids'];
@@ -183,18 +210,6 @@ class AutoLexiconEventHandlerManager extends AutoLexiconEventHandler {
                 $context =& $this->modx->event->params['context'];
                 if (!$context) {break;}
                 $this->{$this->modx->event->name}($context);
-                break;
-            // todo: would another event work better? check for resource/x?
-            case 'OnManagerPageInit': // before ondocformprerender (?)
-				$lang = $this->_getCurrentManagerLang();
-				$this->switchCacheKey($lang);
-                break;
-            case 'OnManagerPageAfterRender': // after ondocformsave (?)
-                $controller =& $this->modx->event->params['controller'];
-                if (!$controller) {break;}
-				if ($controller->config['controller'] == 'resource/update') {
-					$this->OnManagerPageAfterRender($controller);
-				}
                 break;
 
         }
@@ -212,12 +227,21 @@ class AutoLexiconEventHandlerManager extends AutoLexiconEventHandler {
             $current_lang = $_GET['autolexicon_lang'];
         }
         if ($current_lang != $session_lang) {
-            $_SESSION[$this->al->config['session_edit_lang_key']] = $current_lang;
-        }
+			$_SESSION[$this->al->config['session_edit_lang_key']] = $current_lang;
+		}
         return $current_lang;
     }
+	public function _setCurrentManagerLang($lang=null) {
+		$session_lang = $this->modx->getOption($this->al->config['session_edit_lang_key'], $_SESSION, $this->al->config['default_lang']);
+		if (is_null($lang)) {
+			$lang = $this->al->config['default_lang'];
+		}
+		if ($session_lang != $lang) {
+			$_SESSION[$this->al->config['session_edit_lang_key']] = $lang;
+		}
+	}
 
-    /**
+	/**
      * Generates the HTML for the buttons used to switch the resource editor language.
      *
      * @param modResource $resource
@@ -252,48 +276,44 @@ class AutoLexiconEventHandlerManager extends AutoLexiconEventHandler {
         /* grab manager actions IDs */
         $actions = $this->modx->request->getAllActionIDs();
         /* create autolexicon-box with links to translations */
-        // todo: manually sync langs
-        // todo: manually copy langs
+        // todo: add buttons to sync & copy langs (revert to English, etc...)
         $managerButtons = $this->_createManagerButtons($resource, $actions);
         $output = '<div id="autolexicon-box">' . $managerButtons . '</div>';
         $this->modx->event->output($output);
         /* include CSS/JS */
         $this->modx->regClientCSS($this->al->config['cssUrl'] . 'autolexicon.css?v=6');
         $this->modx->regClientStartupScript($this->al->config['jsUrl'] . 'autolexicon.js?v=3');
+		return null;
     }
 
     public function OnDocFormRender(modResource $resource, array $params=array()) {
 		// OnDocFormRender
-		// todo: check if resource translated, and if not, create translations
+		// important: check if resource translated, and if not, create translations
 		/* do not render buttons for new resources */
 		if (!$resource->get('id')) return;
         $lang = $this->_getCurrentManagerLang();
         $this->handler->translateObjectFields($resource, $lang);
-		/** @var $tv modTemplateVar */
-		$tv = $this->modx->getObject('modTemplateVar', array('name' => 'test'));
-		$tv->setValue($resource->get('id'), 'testvalue');
         return null;
     }
 
     public function OnManagerPageAfterRender(modManagerController $controller) {
-		// TVs cannot be replaced by substituting in memory. Must be replaced via search-&-replace
-		// example tv tag output: [[!%al.resource.11.test? &amp;topic=`resource` &amp;namespace=`autolexicon`]]
-//		$test = '[[!%al.resource.11.pagetitle? &topic=`resource` &namespace=`autolexicon`]]';
-		$regex1 = $this->handler->_getLexiconTagRegEx();
-		$regex2 = str_replace('[\&]','[\&]amp[\;]',$regex1);
-		$ignore_fields = array_merge($this->handler->config['never_replace_fields_list'],$this->handler->config['set_as_default']);
-		$controller->content = $this->handler->_parseLexiconTags($controller->content,$this->_getCurrentManagerLang(),$regex1,$ignore_fields);
-		$controller->content = $this->handler->_parseLexiconTags($controller->content,$this->_getCurrentManagerLang(),$regex2,$ignore_fields);
+		$page = $controller->config['controller'];
+		if ($page == 'resource/update') {
+			// TVs cannot be replaced by substituting in memory. Must be replaced via search-&-replace
+			$controller->content = $this->handler->_parseLexiconTags($controller->content, $this->_getCurrentManagerLang());
+		} else {
+			$this->_setCurrentManagerLang(null);
+		}
         return null;
     }
 
-    public function OnBeforeDocFormSave(modResource $resource, array $params=array()) {
+	public function OnBeforeDocFormSave(modResource $resource, array $params=array()) {
         return null;
     }
 
     public function OnDocFormSave(modResource $resource, array $params=array()) {
         $current_lang = $this->_getCurrentManagerLang();
-        // todo: should this be skipped? reloadOnly is when template is switched without saving
+        // should this be skipped? reloadOnly is when template is switched without saving
         if (!$this->modx->getOption('reloadOnly',$params,false)) {
             $this->handler->syncObject($resource, $current_lang);
             $this->al->refreshCache();

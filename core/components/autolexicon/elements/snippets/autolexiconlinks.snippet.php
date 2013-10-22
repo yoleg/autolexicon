@@ -22,7 +22,7 @@
  * - args: A JSON array of parameters to add to the URL
  * - options: A JSON array of system setting overrides to pass to the URL
  */
-// todo-important: remove debug req.
+
 if (!$modx->getOption('autolexicon.enabled',null,false)) return '';
 
 $autolexicon = $modx->getService('autolexicon', 'AutoLexicon', $modx->getOption('autolexicon.core_path', null, $modx->getOption('core_path') . 'components/autolexicon/') . 'model/autolexicon/', $scriptProperties);
